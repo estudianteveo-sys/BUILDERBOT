@@ -10,8 +10,8 @@ RUN npm run build
 FROM node:21-alpine3.18 as deploy
 WORKDIR /app
 ARG PORT=3008
-ENV PORT=
-EXPOSE 
+ENV PORT=$PORT
+EXPOSE $PORT
 COPY --from=builder /app/assets ./assets
 COPY --from=builder /app/dist ./dist
 COPY --from=builder /app/package*.json ./
