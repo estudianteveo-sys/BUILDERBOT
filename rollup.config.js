@@ -23,6 +23,8 @@ export default {
         'dotenv',
         'path',
         'fs',
+        'googleapis',
+        'date-fns'
     ],
 }
 
