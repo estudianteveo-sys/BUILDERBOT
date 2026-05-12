@@ -420,14 +420,51 @@ REGLAS ESTRICTAS:
         
         const aiResponse = response.choices[0].message.content || '';
         
-        // Detectar si la IA confirmó la cita
+        // --- DETECCIÓN PRIMARIA: etiqueta [CONFIRMADO] exacta ---
         const confirmMatch = aiResponse.match(/\[CONFIRMADO:\s*(.+?)\s*\|\s*(.+?)\]/);
         
-        if (confirmMatch) {
-            // Se logró el acuerdo — extraer ambas fechas
-            const fechaLimpia = confirmMatch[1].trim();
-            const fechaIso = confirmMatch[2].trim();
-            const finalMessage = aiResponse.replace(/\[CONFIRMADO:\s*.+?\]/, '').trim();
+        // --- DETECCIÓN SECUNDARIA: keywords de confirmación (fallback robusto) ---
+        const confirmKeywords = ['perfecto', 'agendado', 'agendamos', 'confirmado', 'confirmada', 'listo', 'quedamos', 'te espero', 'nos vemos', 'anotado'];
+        const looksLikeConfirmation = confirmKeywords.some(kw => aiResponse.toLowerCase().includes(kw));
+        
+        if (confirmMatch || looksLikeConfirmation) {
+            let fechaLimpia = '';
+            let fechaIso = '';
+
+            if (confirmMatch) {
+                // Camino feliz: la IA incluyó la etiqueta correctamente
+                fechaLimpia = confirmMatch[1].trim();
+                fechaIso = confirmMatch[2].trim();
+            } else {
+                // Camino de rescate: extraer la fecha con una segunda llamada de IA
+                console.log('⚠️ IA confirmó sin etiqueta. Extrayendo fecha con llamada de rescate...');
+                try {
+                    const rescueResponse = await openai.chat.completions.create({
+                        model: 'deepseek-chat',
+                        messages: [{
+                            role: 'system',
+                            content: `Extrae la fecha y hora de la siguiente confirmación de cita.\nFecha actual de referencia: ${currentDate}.\nResponde ÚNICAMENTE con este formato exacto (sin nada más): TEXTO_LEGIBLE | YYYY-MM-DD HH:mm:00\nEjemplo: "13 de mayo de 2026, 9:00 AM | 2026-05-13 09:00:00"\nMensaje a analizar: "${aiResponse}"`
+                        }],
+                        temperature: 0,
+                        max_tokens: 60
+                    });
+                    const extracted = rescueResponse.choices[0].message.content?.trim() || '';
+                    const parts = extracted.split('|');
+                    if (parts.length === 2) {
+                        fechaLimpia = parts[0].trim();
+                        fechaIso = parts[1].trim();
+                    } else {
+                        fechaLimpia = myState.slot1_readable || slots.option1;
+                        fechaIso = myState.slot1_iso || slots.option1Iso;
+                    }
+                } catch {
+                    fechaLimpia = myState.slot1_readable || slots.option1;
+                    fechaIso = myState.slot1_iso || slots.option1Iso;
+                }
+            }
+
+            // Limpiar la etiqueta del mensaje antes de enviarlo
+            const finalMessage = aiResponse.replace(/\[CONFIRMADO:\s*.+?\]/g, '').trim();
             await flowDynamic([{ body: finalMessage, delay: 1000 }]);
             
             // Disparar Webhook con datos limpios
@@ -436,7 +473,7 @@ REGLAS ESTRICTAS:
                 contacto: myState.contact_info || 'No proporcionado',
                 proyecto: myState.project_type || 'No especificado',
                 fecha_acordada: fechaLimpia,
-                fecha_iso: fechaIso, // Para Google Calendar
+                fecha_iso: fechaIso,
                 timestamp: getMexicoTimestamp()
             };
             
