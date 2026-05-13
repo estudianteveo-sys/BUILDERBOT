@@ -282,7 +282,7 @@ const getBusyEvents = async (): Promise<{start: Date, end: Date}[]> => {
 }
 
 // --- Utilidad: Calcular próximos horarios disponibles (redondeo + horario laboral + calendario) ---
-const getNextAvailableSlots = async (): Promise<{ option1: string, option2: string, option1Iso: string, option2Iso: string }> => {
+const getNextAvailableSlots = async (): Promise<{ allSlotsText: string, option1: string, option2: string, option1Iso: string, option2Iso: string }> => {
     const busyEvents = await getBusyEvents()
     
     const now = new Date()
@@ -317,9 +317,9 @@ const getNextAvailableSlots = async (): Promise<{ option1: string, option2: stri
     const slots: Date[] = []
     let currentCandidate = addMinutes(roundedBase, 30) // Empezar a buscar desde +30 mins
     
-    // Buscar hasta encontrar 2 slots válidos (límite de 100 iteraciones por seguridad)
+    // Buscar hasta encontrar 20 slots válidos (límite de 300 iteraciones por seguridad)
     let iterations = 0
-    while (slots.length < 2 && iterations < 100) {
+    while (slots.length < 20 && iterations < 300) {
         if (isValidSlot(currentCandidate)) {
             slots.push(new Date(currentCandidate))
         }
@@ -337,7 +337,10 @@ const getNextAvailableSlots = async (): Promise<{ option1: string, option2: stri
     const fmtReadable = (d: Date) => format(d, "EEEE d 'de' MMMM, h:mm a", { locale: es })
     const fmtIso = (d: Date) => format(d, 'yyyy-MM-dd HH:mm:00')
 
+    const availableSlotsList = slots.map(d => `- ${fmtReadable(d)}`).join('\n')
+
     return {
+        allSlotsText: availableSlotsList,
         option1: slots[0] ? fmtReadable(slots[0]) : '',
         option2: slots[1] ? fmtReadable(slots[1]) : '',
         option1Iso: slots[0] ? fmtIso(slots[0]) : '',
@@ -368,10 +371,11 @@ const schedulingFlow = addKeyword<Provider, Database>([
 
     const initPrompt = `Eres el asistente de agendamiento de Axis Studio.
 El horario de atención para llamadas es ESTRICTAMENTE de 9:00 AM a 2:00 PM, de lunes a viernes.
-Ya revisé la agenda y encontré los dos próximos horarios libres y disponibles:
-- Opción 1: ${slots.option1}
-- Opción 2: ${slots.option2}
-OFRECE EXACTAMENTE ESAS DOS OPCIONES al cliente. No inventes otras horas. Sé breve (máximo 2 líneas).`;
+Ya revisé la agenda y encontré varios espacios libres. Aquí están todos los horarios disponibles próximos:
+${slots.allSlotsText}
+
+OFRECE INICIALMENTE SÓLO LAS DOS PRIMERAS OPCIONES al cliente de forma natural (Ej. "¿Te funciona el martes a las 10:00 AM o a las 10:30 AM?").
+No ofrezcas toda la lista de golpe. Sé breve (máximo 2 líneas).`;
     
     try {
         const response = await openai.chat.completions.create({
@@ -404,11 +408,13 @@ OFRECE EXACTAMENTE ESAS DOS OPCIONES al cliente. No inventes otras horas. Sé br
 Tu objetivo es acordar una fecha y hora para una videollamada con el cliente.
 REGLAS ESTRICTAS:
 1. El horario ÚNICO permitido es de 9:00 AM a 2:00 PM, lunes a viernes.
-2. Los próximos horarios libres en la agenda son: ${slots.option1} o ${slots.option2}.
-3. Si el usuario propone un horario válido (Lunes a Viernes, 9am-2pm), ACÉPTALO SIEMPRE Y CUANDO sea distinto a los horarios previamente rechazados y no esté ocupado en tu contexto.
-4. MUY IMPORTANTE: Una vez que el cliente confirme un día y hora, DEBES terminar tu mensaje con: [CONFIRMADO: fecha en texto | YYYY-MM-DD HH:mm:00]
+2. Estos son TODOS los horarios que están LIBRES actualmente en la agenda:
+${slots.allSlotsText}
+3. Si el usuario propone un horario que ESTÁ en la lista de arriba, acéptalo. Si pide "más tarde" o "mañana", revisa la lista de arriba y ofrécele las opciones que coincidan. NO inventes horarios que no estén en la lista.
+4. NUNCA asumas que el usuario ha aceptado un horario a menos que te diga explícitamente "sí", "me parece bien", "ok", etc.
+5. MUY IMPORTANTE: Una vez que el cliente TE CONFIRME EXPLÍCITAMENTE un día y hora de la lista, DEBES terminar tu mensaje con: [CONFIRMADO: fecha en texto | YYYY-MM-DD HH:mm:00]
    Ejemplo: "Perfecto, agendamos para mañana a las 10 AM. ¡Te espero! [CONFIRMADO: 12 de mayo de 2026, 10:00 AM | 2026-05-12 10:00:00]"
-5. Sé amable, breve y natural (máximo 2 líneas).`;
+6. Sé amable, breve y natural (máximo 2 líneas).`;
 
     try {
         const response = await openai.chat.completions.create({
@@ -423,8 +429,8 @@ REGLAS ESTRICTAS:
         // --- DETECCIÓN PRIMARIA: etiqueta [CONFIRMADO] exacta ---
         const confirmMatch = aiResponse.match(/\[CONFIRMADO:\s*(.+?)\s*\|\s*(.+?)\]/);
         
-        // --- DETECCIÓN SECUNDARIA: keywords de confirmación (fallback robusto) ---
-        const confirmKeywords = ['perfecto', 'agendado', 'agendamos', 'confirmado', 'confirmada', 'listo', 'quedamos', 'te espero', 'nos vemos', 'anotado'];
+        // --- DETECCIÓN SECUNDARIA: keywords de confirmación (fallback estricto) ---
+        const confirmKeywords = ['agendado', 'confirmado', 'confirmada'];
         const looksLikeConfirmation = confirmKeywords.some(kw => aiResponse.toLowerCase().includes(kw));
         
         if (confirmMatch || looksLikeConfirmation) {
