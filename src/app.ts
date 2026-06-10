@@ -411,7 +411,23 @@ const main = async () => {
         }
     );
 
+    // --- KEEP-ALIVE PARA EVITAR PAUSADO DE SUPABASE ---
+    if (process.env.POSTGRES_DB_URI) {
+        console.log('🔄 [Keep-Alive] Iniciando tarea programada de ping a la base de datos (cada 24 horas).');
+        setInterval(async () => {
+            try {
+                if (adapterDB && adapterDB.db) {
+                    await adapterDB.db.query('SELECT 1;');
+                    console.log('🔄 [Keep-Alive] Consulta "SELECT 1" ejecutada con éxito en Supabase para mantener el proyecto activo.');
+                }
+            } catch (error) {
+                console.error('❌ [Keep-Alive] Error al intentar consultar la base de datos para mantenerla activa:', error);
+            }
+        }, 86400000); // 24 horas en milisegundos
+    }
+
     httpServer(+PORT)
 }
 
 main()
+
