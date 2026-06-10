@@ -374,17 +374,9 @@ const main = async () => {
     const server: any = adapterProvider.server;
     server.post(
         '/v1/instagram',
-        (req: any, res: any, next: any) => {
-            let body = '';
-            req.on('data', (chunk: any) => { body += chunk.toString() });
-            req.on('end', () => { 
-                try { req.body = JSON.parse(body) } catch (e) { req.body = {} }
-                next() 
-            });
-        },
         async (req: any, res: any) => {
             try {
-                const { userId, text, channel, triggerType, userName } = req.body;
+                const { userId, text, channel, triggerType, userName } = req.body || {};
                 
                 if (!userId || !text) {
                     res.writeHead(400, { 'Content-Type': 'application/json' });
