@@ -405,17 +405,36 @@ const main = async () => {
 
     // --- KEEP-ALIVE PARA EVITAR PAUSADO DE SUPABASE ---
     if (process.env.POSTGRES_DB_URI) {
-        console.log('🔄 [Keep-Alive] Iniciando tarea programada de ping a la base de datos (cada 24 horas).');
-        setInterval(async () => {
-            try {
-                if (adapterDB && adapterDB.db) {
-                    await adapterDB.db.query('SELECT 1;');
-                    console.log('🔄 [Keep-Alive] Consulta "SELECT 1" ejecutada con éxito en Supabase para mantener el proyecto activo.');
+        const KEEP_ALIVE_INTERVAL = 6 * 60 * 60 * 1000; // 6 horas en milisegundos
+
+        const pingDatabase = async () => {
+            const maxRetries = 3;
+            for (let attempt = 1; attempt <= maxRetries; attempt++) {
+                try {
+                    if (adapterDB && adapterDB.db) {
+                        await adapterDB.db.query('SELECT 1;');
+                        console.log(`🔄 [Keep-Alive] Ping exitoso a Supabase (${new Date().toISOString()})`);
+                        return; // Éxito, salir del loop
+                    } else {
+                        console.warn('⚠️ [Keep-Alive] adapterDB.db no disponible, saltando ping.');
+                        return;
+                    }
+                } catch (error) {
+                    console.error(`❌ [Keep-Alive] Intento ${attempt}/${maxRetries} falló:`, error);
+                    if (attempt < maxRetries) {
+                        await new Promise(r => setTimeout(r, 5000)); // Esperar 5s antes de reintentar
+                    }
                 }
-            } catch (error) {
-                console.error('❌ [Keep-Alive] Error al intentar consultar la base de datos para mantenerla activa:', error);
             }
-        }, 86400000); // 24 horas en milisegundos
+            console.error('❌ [Keep-Alive] Todos los intentos de ping fallaron.');
+        };
+
+        // Ping inmediato al arrancar (no esperar 6 horas)
+        console.log('🔄 [Keep-Alive] Iniciando keep-alive de Supabase (ping cada 6 horas).');
+        pingDatabase();
+
+        // Ping periódico cada 6 horas
+        setInterval(pingDatabase, KEEP_ALIVE_INTERVAL);
     }
 
     httpServer(+PORT)

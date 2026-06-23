@@ -1,0 +1,39 @@
+name: Supabase Keep-Alive
+
+# Se ejecuta cada 5 días a las 8:00 AM UTC (2:00 AM CST México)
+# También se puede ejecutar manualmente desde GitHub
+on:
+  schedule:
+    - cron: '0 8 */5 * *'
+  workflow_dispatch: # Permite ejecución manual
+
+jobs:
+  ping-supabase:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase Database
+        env:
+          POSTGRES_DB_URI: ${{ secrets.POSTGRES_DB_URI }}
+        run: |
+          echo "🔄 Ejecutando keep-alive ping a Supabase..."
+          echo "📅 Fecha: $(date -u '+%Y-%m-%d %H:%M:%S UTC')"
+          
+          # Instalar cliente PostgreSQL
+          sudo apt-get update -qq && sudo apt-get install -yqq postgresql-client > /dev/null 2>&1
+          
+          # Ejecutar ping con timeout de 10 segundos
+          if psql "$POSTGRES_DB_URI" -c "SELECT 1;" --no-psqlrc -t -A 2>/dev/null; then
+            echo "✅ Keep-alive exitoso - Supabase está activo"
+          else
+            echo "❌ Error al conectar con Supabase"
+            exit 1
+          fi
+
+      - name: Verificar tablas activas
+        env:
+          POSTGRES_DB_URI: ${{ secrets.POSTGRES_DB_URI }}
+        run: |
+          # Query adicional para asegurar actividad real
+          psql "$POSTGRES_DB_URI" --no-psqlrc -t -A -c \
+            "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';" 2>/dev/null
+          echo "✅ Verificación de tablas completada"
