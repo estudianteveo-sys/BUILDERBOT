@@ -427,6 +427,21 @@ const main = async () => {
                 }
             }
             console.error('❌ [Keep-Alive] Todos los intentos de ping fallaron.');
+            
+            // Generar alerta en archivo compartido para que Jarvis la lea y notifique por Telegram
+            try {
+                const alertPath = 'C:/Users/Oliver/.gemini/shared_alerts/alert_supabase_failed.json';
+                const alertData = {
+                    origin: 'BUILDERBOT',
+                    timestamp: new Date().toISOString(),
+                    message: 'Todos los intentos de ping a Supabase fallaron en la máquina local.',
+                    details: 'Es posible que el proyecto esté pausado o que haya un problema de conexión.'
+                };
+                fs.writeFileSync(alertPath, JSON.stringify(alertData, null, 2), 'utf-8');
+                console.log('🚨 [Keep-Alive] Alerta escrita con éxito en shared_alerts/alert_supabase_failed.json');
+            } catch (err) {
+                console.error('❌ [Keep-Alive] No se pudo escribir el archivo de alerta:', err);
+            }
         };
 
         // Ping inmediato al arrancar (no esperar 6 horas)
