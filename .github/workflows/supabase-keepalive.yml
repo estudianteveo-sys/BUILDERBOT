@@ -21,19 +21,21 @@ jobs:
           # Instalar cliente PostgreSQL
           sudo apt-get update -qq && sudo apt-get install -yqq postgresql-client > /dev/null 2>&1
           
-          # Ejecutar ping con timeout de 10 segundos
-          if psql "$POSTGRES_DB_URI" -c "SELECT 1;" --no-psqlrc -t -A 2>/dev/null; then
-            echo "✅ Keep-alive exitoso - Supabase está activo"
+          # Ejecutar ping con transacciones de base de datos reales para registrar actividad
+          # Esto crea una tabla de control si no existe e inserta el registro del ping actual.
+          SQL_QUERY="
+            CREATE TABLE IF NOT EXISTS public._keep_alive (
+              id SERIAL PRIMARY KEY,
+              last_ping TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+            );
+            INSERT INTO public._keep_alive (last_ping) VALUES (CURRENT_TIMESTAMP);
+            DELETE FROM public._keep_alive WHERE last_ping < NOW() - INTERVAL '30 days';
+            SELECT count(*) FROM public._keep_alive;
+          "
+          
+          if psql "$POSTGRES_DB_URI" -c "$SQL_QUERY" --no-psqlrc -t -A 2>/dev/null; then
+            echo "✅ Keep-alive exitoso - Actividad registrada en Supabase"
           else
-            echo "❌ Error al conectar con Supabase"
+            echo "❌ Error al conectar o escribir en Supabase"
             exit 1
           fi
-
-      - name: Verificar tablas activas
-        env:
-          POSTGRES_DB_URI: ${{ secrets.POSTGRES_DB_URI }}
-        run: |
-          # Query adicional para asegurar actividad real
-          psql "$POSTGRES_DB_URI" --no-psqlrc -t -A -c \
-            "SELECT count(*) FROM information_schema.tables WHERE table_schema = 'public';" 2>/dev/null
-          echo "✅ Verificación de tablas completada"
