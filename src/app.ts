@@ -412,6 +412,8 @@ const main = async () => {
             const maxRetries = 3;
             for (let attempt = 1; attempt <= maxRetries; attempt++) {
                 try {
+                    // SIMULACIÓN DE PRUEBA: Lanzamos un error forzado
+                    throw new Error("Simulación de fallo para prueba de alerta de Telegram.");
                     if (adapterDB && adapterDB.db) {
                         await adapterDB.db.query('SELECT 1;');
                         console.log(`🔄 [Keep-Alive] Ping exitoso a Supabase (${new Date().toISOString()})`);
