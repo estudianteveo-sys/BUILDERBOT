@@ -1,10 +1,10 @@
 name: Supabase Keep-Alive
 
-# Se ejecuta cada 5 días a las 8:00 AM UTC (2:00 AM CST México)
+# Se ejecuta todos los días a las 8:00 AM UTC (2:00 AM CST México)
 # También se puede ejecutar manualmente desde GitHub
 on:
   schedule:
-    - cron: '0 8 */5 * *'
+    - cron: '0 8 * * *'
   workflow_dispatch: # Permite ejecución manual
 
 jobs:
