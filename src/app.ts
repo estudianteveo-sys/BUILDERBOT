@@ -4,6 +4,7 @@ import { PostgreSQLAdapter } from '@builderbot/database-postgres'
 import { BaileysProvider as Provider } from '@builderbot/provider-baileys'
 import * as dotenv from 'dotenv'
 import fs from 'fs'
+import https from 'https'
 import { 
     chatWithIA, 
     sanitizeResponse, 
@@ -428,19 +429,64 @@ const main = async () => {
             }
             console.error('❌ [Keep-Alive] Todos los intentos de ping fallaron.');
             
-            // Generar alerta en archivo compartido para que Jarvis la lea y notifique por Telegram
+            // Enviar alerta directa a Telegram a través de HTTPS
+            const botToken = process.env.TELEGRAM_BOT_TOKEN;
+            const userId = process.env.TELEGRAM_USER_ID;
+
+            if (!botToken || !userId) {
+                console.warn('⚠️ [Keep-Alive] TELEGRAM_BOT_TOKEN o TELEGRAM_USER_ID no configurados. No se pudo enviar la alerta.');
+                return;
+            }
+
             try {
-                const alertPath = 'C:/Users/Oliver/.gemini/shared_alerts/alert_supabase_failed.json';
-                const alertData = {
-                    origin: 'BUILDERBOT',
-                    timestamp: new Date().toISOString(),
-                    message: 'Todos los intentos de ping a Supabase fallaron en la máquina local.',
-                    details: 'Es posible que el proyecto esté pausado o que haya un problema de conexión.'
+                const message = `🚨 *ALERTA CRÍTICA — BUILDERBOT (Railway)*\n\n` +
+                                `⚠️ *Incidente:* Todos los intentos de ping a Supabase fallaron en la nube.\n` +
+                                `⏰ *Fecha/Hora:* ${new Date().toISOString()}\n\n` +
+                                `Nota: Revisa si el proyecto de Supabase necesita ser despausado manualmente o si las credenciales de conexión son correctas.`;
+
+                const payload = JSON.stringify({
+                    chat_id: userId,
+                    text: message,
+                    parse_mode: 'Markdown'
+                });
+
+                const options = {
+                    hostname: 'api.telegram.org',
+                    port: 443,
+                    path: `/bot${botToken}/sendMessage`,
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Content-Length': ByteLength(payload)
+                    }
                 };
-                fs.writeFileSync(alertPath, JSON.stringify(alertData, null, 2), 'utf-8');
-                console.log('🚨 [Keep-Alive] Alerta escrita con éxito en shared_alerts/alert_supabase_failed.json');
+
+                // Función auxiliar para calcular tamaño en bytes
+                function ByteLength(str: string) {
+                    return Buffer.byteLength(str, 'utf8');
+                }
+
+                const req = https.request(options, (res) => {
+                    let data = '';
+                    res.on('data', (chunk) => { data += chunk; });
+                    res.on('end', () => {
+                        if (res.statusCode === 200) {
+                            console.log('🚨 [Keep-Alive] Alerta de fallo enviada con éxito a Telegram.');
+                        } else {
+                            console.error(`❌ [Keep-Alive] Error al enviar alerta a Telegram: Status ${res.statusCode} - ${data}`);
+                        }
+                    });
+                });
+
+                req.on('error', (err) => {
+                    console.error('❌ [Keep-Alive] Error de red al enviar alerta a Telegram:', err);
+                });
+
+                req.write(payload);
+                req.end();
+
             } catch (err) {
-                console.error('❌ [Keep-Alive] No se pudo escribir el archivo de alerta:', err);
+                console.error('❌ [Keep-Alive] Excepción al intentar enviar alerta a Telegram:', err);
             }
         };
 
