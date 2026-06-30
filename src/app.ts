@@ -266,18 +266,25 @@ ${slots.allSlotsText}
 const aiFlow = addKeyword<Provider, Database>(EVENTS.WELCOME).addAction(
     async (ctx, { flowDynamic, state, gotoFlow }) => {
         
-        // INTERCEPTOR (Human Handoff): Si intentan obtener cotizaciones por la fuerza o aceptan agendar, despacharlos a agenda
+        // INTERCEPTOR (Human Handoff): Si intentan obtener cotizaciones o aceptan agendar, despacharlos obligatoriamente al flujo estructurado de agenda
         const bodyLower = ctx.body.toLowerCase()
-        const handoffTriggers = ['llamada', 'cotización', 'cotizacion', 'precio exacto', 'hablar con alguien', 'asesor', 'agendar', 'reunión', 'reunion', 'cita', 'cuanto cuesta', 'cuánto cuesta']
+        const handoffTriggers = [
+            'llamada', 'cotización', 'cotizacion', 'precio exacto', 'hablar con alguien', 
+            'asesor', 'agendar', 'reunión', 'reunion', 'cita', 'cuanto cuesta', 'cuánto cuesta',
+            'quiero agendar', 'me interesa agendar', 'fecha', 'horario'
+        ]
         
         // Detectar si el usuario dice "si" a una propuesta de agendamiento previa
         const myState = state.getMyState()
         const history = (myState?.history || []) as any[]
         const lastAssistantMessage = [...history].reverse().find(m => m.role === 'assistant')?.content.toLowerCase() || ''
-        const isAffirmation = ['si', 'sí', 'claro', 'por supuesto', 'va', 'dale', 'me interesa', 'aceptar', 'ok', 'agendemos'].some(aff => bodyLower === aff || bodyLower.startsWith(aff + ' '))
-        const botWasAskingToSchedule = ['agendar', 'llamada', 'cita', 'reunión', 'reunion'].some(kw => lastAssistantMessage.includes(kw))
+        
+        const isAffirmation = ['si', 'sí', 'claro', 'por supuesto', 'va', 'dale', 'me interesa', 'aceptar', 'ok', 'agendemos', 'me gustaria', 'me gustaría'].some(aff => bodyLower === aff || bodyLower.startsWith(aff + ' '))
+        const botWasAskingToSchedule = ['agendar', 'llamada', 'cita', 'reunión', 'reunion', 'sesion consultiva', 'sesión consultiva'].some(kw => lastAssistantMessage.includes(kw))
 
         if (handoffTriggers.some(trigger => bodyLower.includes(trigger)) || (isAffirmation && botWasAskingToSchedule)) {
+            // Limpiar historial de simulación para que no confunda al schedulingFlow
+            await state.update({ history: history.filter(m => !m.content.includes("necesito tu nombre y correo")) })
             return gotoFlow(schedulingFlow)
         }
 
