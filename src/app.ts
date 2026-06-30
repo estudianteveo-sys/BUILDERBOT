@@ -35,11 +35,30 @@ const farewellFlow = addKeyword<Provider, Database>([
 })
 
 const welcomeFlow = addKeyword<Provider, Database>([
-    'hola', 'buenas', 'buenos dias', 'buenas tardes', 'buenas noches', 'iniciar'
+    'hola', 'buenas', 'buenos dias', 'buenas tardes', 'buenas noches', 'iniciar',
+    'tutoría personalizada', 'tutoría', 'tutoria',
+    'implementación de ia', 'implementación', 'implementacion',
+    'consultoría creativa', 'consultoría', 'consultoria',
+    'desarrollo de apps', 'desarrollo',
+    'landing pages', 'landing',
+    'automatizaciones', 'automatización', 'automatizacion'
 ]).addAction(async (ctx, { state, flowDynamic }) => {
     const myState = state.getMyState()
+    const bodyText = ctx.body.toLowerCase()
 
-    // GUARDIA: Si ya saludamos, procesar mensaje con IA en vez de re-saludar
+    // Palabras clave de servicios para bienvenida personalizada
+    const services = [
+        { name: 'Tutoría Personalizada', keywords: ['tutoría', 'tutoria'] },
+        { name: 'Implementación de IA', keywords: ['implementación', 'implementacion'] },
+        { name: 'Consultoría Creativa', keywords: ['consultoría', 'consultoria'] },
+        { name: 'Desarrollo de Apps', keywords: ['desarrollo', 'apps'] },
+        { name: 'Landing Pages', keywords: ['landing'] },
+        { name: 'Automatizaciones', keywords: ['automatizacion', 'automatización', 'automatizaciones'] }
+    ]
+
+    const matchedService = services.find(s => s.keywords.some(kw => bodyText.includes(kw)))
+
+    // GUARDIA: Si ya saludamos previamente, procesar mensaje con IA directamente
     if (myState?.hasGreeted) {
         const history = (myState?.history || []) as any[]
         await wait(2500)
@@ -53,17 +72,26 @@ const welcomeFlow = addKeyword<Provider, Database>([
         return
     }
 
-    // PRIMERA VEZ: Enviar saludo formal y registrar en historial de IA
+    // PRIMERA VEZ: Enviar saludo y registrar en historial
+    const serviceName = matchedService ? matchedService.name : null
+    let welcomeMsg1 = 'Hola, te damos la bienvenida a Axis Studio. Soy Axis Bot, tu asistente virtual.'
+    let welcomeMsg2 = '¿En qué podemos asesorarte hoy? ¿Deseas conocer nuestros servicios profesionales o agendar una llamada directa?'
+
+    if (serviceName) {
+        welcomeMsg1 = `¡Hola! Veo que te interesa nuestro servicio de *${serviceName}* en Axis Studio. Soy Axis Bot, tu asistente virtual.`
+        welcomeMsg2 = `¿Te gustaría conocer brevemente en qué consiste este servicio o prefieres agendar una llamada directa para platicar sobre tu proyecto?`
+    }
+
     const history = (myState?.history || []) as any[]
     history.push({ 
         role: 'assistant', 
-        content: 'Hola, te damos la bienvenida a Axis Studio. Soy Axis Bot, asistente de atención inicial a clientes. ¿En qué podemos asesorarte hoy? ¿Deseas conocer los servicios o agendar una llamada?'
+        content: `${welcomeMsg1} ${welcomeMsg2}`
     })
     await state.update({ history, hasGreeted: true })
 
     await flowDynamic([
-        { body: 'Hola, te damos la bienvenida a Axis Studio. Soy Axis Bot, asistente de atención inicial a clientes.', delay: 2000 },
-        { body: '¿En qué podemos asesorarte hoy? ¿Deseas conocer los servicios o agendar una llamada?', delay: 2000 }
+        { body: welcomeMsg1, delay: 2000 },
+        { body: welcomeMsg2, delay: 2000 }
     ])
 })
 
